@@ -447,7 +447,14 @@ export class GameScene extends Phaser.Scene {
         if (g.state === "RESPAWN") {
           if (nowTile.x === g.spawn.tile.x && nowTile.y === g.spawn.tile.y) {
             g.state = frightenedActive ? "FRIGHTENED" : "NORMAL";
-            g.currentDir = g.spawn.dir;
+            // Spawn-Richtung kann bei engen Spawn-Tiles in eine Wand zeigen (z.B. Inky/Clyde).
+            // Daher nur übernehmen, wenn sie wirklich begehbar ist; sonst deterministisch fallbacken.
+            if (this.canEntityMoveFrom(nowTile, g.spawn.dir)) {
+              g.currentDir = g.spawn.dir;
+            } else {
+              const fallback = this.validDirsFrom(nowTile, null);
+              if (fallback.length > 0) g.currentDir = fallback[0];
+            }
             g.body.setFillStyle(g.state === "FRIGHTENED" ? 0x2b6cff : g.baseColor, 1);
             g.body.setAlpha(1);
           }
