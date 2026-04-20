@@ -15,6 +15,7 @@ Eine spielbare Pac‑Man‑Webanwendung mit klassischem Labyrinth-Gameplay: Punk
 ## Nicht‑Ziele
 
 - 1:1 Arcade‑Emulation (exakte Timings/Original-Bugs)
+- 3D
 - Original-Assets oder rechtlich geschützte Sounds
 - Multiplayer, Online‑Highscores, Account-System
 
@@ -160,3 +161,4 @@ Eine spielbare Pac‑Man‑Webanwendung mit klassischem Labyrinth-Gameplay: Punk
 - **Snap/Intersection‑Bugs**: früh Debug‑Overlay für Tile‑Center + Collision Points einplanen.
 - **BFS‑Kosten**: BFS nur an Kreuzungen; optional Distanzfelder cachen, wenn nötig.
 - **State‑Komplexität**: klare State Machine für Game und Ghosts, zentralisierte Transitions.
+
