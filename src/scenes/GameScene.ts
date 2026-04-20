@@ -396,10 +396,21 @@ export class GameScene extends Phaser.Scene {
         g.body.setFillStyle(0x2b6cff, 1);
       }
 
+      // Für Ghosts darf Snap nicht größer sein als die Schrittweite, sonst "kleben" sie
+      // (besonders im Frightened-Modus mit geringerer Geschwindigkeit).
+      const speedForSnap =
+        g.state === "RESPAWN"
+          ? g.respawnSpeed
+          : frightenedActive && g.state !== "RESPAWN"
+            ? g.frightenedSpeed
+            : g.normalSpeed;
+      const stepPx = speedForSnap * dt;
+      const ghostSnapEpsilonPx = Math.min(this.snapEpsilonPx, Math.max(0.15, stepPx * 0.6));
+
       const tile = pxToTile(grid, g.body.x, g.body.y);
       const center = tileCenterPx(grid, tile.x, tile.y);
       const closeToCenter =
-        Math.abs(center.x - g.body.x) <= this.snapEpsilonPx && Math.abs(center.y - g.body.y) <= this.snapEpsilonPx;
+        Math.abs(center.x - g.body.x) <= ghostSnapEpsilonPx && Math.abs(center.y - g.body.y) <= ghostSnapEpsilonPx;
 
       if (closeToCenter) {
         g.body.setPosition(center.x, center.y);
@@ -444,14 +455,8 @@ export class GameScene extends Phaser.Scene {
       }
 
       const { dx, dy } = dirToDelta(g.currentDir);
-      const speed =
-        g.state === "RESPAWN"
-          ? g.respawnSpeed
-          : frightenedActive && g.state !== "RESPAWN"
-            ? g.frightenedSpeed
-            : g.normalSpeed;
-      const moveX = dx * speed * dt;
-      const moveY = dy * speed * dt;
+      const moveX = dx * speedForSnap * dt;
+      const moveY = dy * speedForSnap * dt;
 
       const nextX = g.body.x + moveX;
       const nextY = g.body.y + moveY;
