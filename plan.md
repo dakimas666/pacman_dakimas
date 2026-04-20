@@ -160,3 +160,4 @@ Eine spielbare Pac‑Man‑Webanwendung mit klassischem Labyrinth-Gameplay: Punk
 - **Snap/Intersection‑Bugs**: früh Debug‑Overlay für Tile‑Center + Collision Points einplanen.
 - **BFS‑Kosten**: BFS nur an Kreuzungen; optional Distanzfelder cachen, wenn nötig.
 - **State‑Komplexität**: klare State Machine für Game und Ghosts, zentralisierte Transitions.
+

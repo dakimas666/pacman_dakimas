@@ -5,9 +5,12 @@ import { loadLevelFromJson } from "../game/levelLoader";
 import { DIRS, dirToDelta, oppositeDir } from "../game/direction";
 import { isWalkable, pxToTile, tileCenterPx, tileKey } from "../game/grid";
 import { bfsDistances, bestDirByDistances } from "../game/bfs";
+import { Sfx } from "../game/sfx";
 
 export class GameScene extends Phaser.Scene {
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
+  private pauseKey?: Phaser.Input.Keyboard.Key;
+  private escKey?: Phaser.Input.Keyboard.Key;
 
   private level = loadLevelFromJson(level1);
   private pacman!: Phaser.GameObjects.Arc;
@@ -15,12 +18,8 @@ export class GameScene extends Phaser.Scene {
   private powersByKey = new Map<string, Phaser.GameObjects.Arc>();
   private remaining = 0;
   private score = 0;
-  private scoreText?: Phaser.GameObjects.Text;
   private lives = 3;
-  private livesText?: Phaser.GameObjects.Text;
-  private state: "PLAYING" | "LEVEL_COMPLETE" | "PLAYER_DYING" | "GAME_OVER" = "PLAYING";
-  private levelCompleteText?: Phaser.GameObjects.Text;
-  private gameOverText?: Phaser.GameObjects.Text;
+  private state: "PLAYING" | "PAUSED" | "LEVEL_COMPLETE" | "PLAYER_DYING" | "GAME_OVER" = "PLAYING";
 
   private currentDir: Direction;
   private desiredDir: Direction | null = null;
@@ -40,10 +39,10 @@ export class GameScene extends Phaser.Scene {
   }> = [];
 
   private ghostMode: "SCATTER" | "CHASE" = "SCATTER";
-  private modeText?: Phaser.GameObjects.Text;
 
   private frightenedUntilMs = 0;
   private eatenStreak = 0;
+  private sfx = new Sfx();
 
   constructor() {
     super("GameScene");
@@ -64,11 +63,8 @@ export class GameScene extends Phaser.Scene {
     this.lives = 3;
     this.state = "PLAYING";
 
-    this.scoreText = undefined;
-    this.livesText = undefined;
-    this.levelCompleteText = undefined;
-    this.gameOverText = undefined;
-    this.modeText = undefined;
+    this.pauseKey = undefined;
+    this.escKey = undefined;
 
     this.ghosts = [];
     this.ghostMode = "SCATTER";
@@ -89,6 +85,8 @@ export class GameScene extends Phaser.Scene {
     ]);
 
     this.cursors = this.input.keyboard!.createCursorKeys();
+    this.pauseKey = this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.P);
+    this.escKey = this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.ESC);
 
     this.renderGrid();
     this.createPellets();
@@ -97,49 +95,26 @@ export class GameScene extends Phaser.Scene {
     const { x, y } = tileCenterPx(this.level.grid, spawn.x, spawn.y);
     this.pacman = this.add.circle(x, y, this.level.grid.tileSize * 0.45, 0xffd800);
 
-    this.scoreText = this.add
-      .text(8, 6, "Score: 0", {
-        fontFamily: "monospace",
-        fontSize: "12px",
-        color: "#9aa0a6"
-      })
-      .setScrollFactor(0);
-
-    this.livesText = this.add
-      .text(this.scale.width - 8, 6, `Lives: ${this.lives}`, {
-        fontFamily: "monospace",
-        fontSize: "12px",
-        color: "#9aa0a6"
-      })
-      .setOrigin(1, 0)
-      .setScrollFactor(0);
-
-    this.add
-      .text(8, 22, "M2: Pellets — Pfeiltasten | Enter: Restart (nach Win)", {
-        fontFamily: "monospace",
-        fontSize: "12px",
-        color: "#9aa0a6"
-      })
-      .setScrollFactor(0);
-
-    this.modeText = this.add
-      .text(8, 38, `Ghosts: ${this.ghostMode}`, {
-        fontFamily: "monospace",
-        fontSize: "12px",
-        color: "#9aa0a6"
-      })
-      .setScrollFactor(0);
-
     this.createGhosts();
     this.startGhostModeLoop();
+
+    this.emitUi();
   }
 
   update(_t: number, dtMs: number) {
+    if (this.pauseKey && Phaser.Input.Keyboard.JustDown(this.pauseKey)) this.togglePause();
+    if (this.escKey && Phaser.Input.Keyboard.JustDown(this.escKey)) this.togglePause();
+
     if (this.state === "LEVEL_COMPLETE" || this.state === "GAME_OVER") {
       const enter = this.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.ENTER);
-      if (enter && Phaser.Input.Keyboard.JustDown(enter)) this.scene.restart();
+      if (enter && Phaser.Input.Keyboard.JustDown(enter)) {
+        this.scene.stop("UIScene");
+        this.scene.start("MenuScene");
+      }
       return;
     }
+
+    if (this.state === "PAUSED") return;
 
     if (this.state === "PLAYER_DYING") {
       return;
@@ -300,6 +275,7 @@ export class GameScene extends Phaser.Scene {
       pellet.destroy();
       this.pelletsByKey.delete(key);
       this.onPelletCollected(10);
+      this.sfx.pellet();
       return;
     }
 
@@ -308,6 +284,7 @@ export class GameScene extends Phaser.Scene {
       power.destroy();
       this.powersByKey.delete(key);
       this.onPelletCollected(50);
+      this.sfx.power();
       this.startFrightened();
     }
   }
@@ -315,19 +292,11 @@ export class GameScene extends Phaser.Scene {
   private onPelletCollected(points: number) {
     this.score += points;
     this.remaining--;
-    if (this.scoreText) this.scoreText.setText(`Score: ${this.score}`);
+    this.emitUi();
 
     if (this.remaining <= 0) {
       this.state = "LEVEL_COMPLETE";
-      this.levelCompleteText = this.add
-        .text(this.scale.width / 2, this.scale.height / 2, "LEVEL COMPLETE\n(Enter zum Neustart)", {
-          fontFamily: "monospace",
-          fontSize: "24px",
-          align: "center",
-          color: "#ffffff",
-          backgroundColor: "#000000"
-        })
-        .setOrigin(0.5, 0.5);
+      this.emitUi();
     }
   }
 
@@ -363,8 +332,9 @@ export class GameScene extends Phaser.Scene {
   private startGhostModeLoop() {
     // Vereinfachte Phasenlogik: SCATTER <-> CHASE im Loop.
     const applyMode = (mode: "SCATTER" | "CHASE") => {
+      if (this.state !== "PLAYING") return;
       this.ghostMode = mode;
-      if (this.modeText) this.modeText.setText(`Ghosts: ${this.ghostMode}`);
+      this.emitUi();
     };
 
     const cycle = () => {
@@ -650,7 +620,8 @@ export class GameScene extends Phaser.Scene {
     this.eatenStreak += 1;
     const points = 200 * Math.pow(2, this.eatenStreak - 1);
     this.score += points;
-    if (this.scoreText) this.scoreText.setText(`Score: ${this.score}`);
+    this.emitUi();
+    this.sfx.eatGhost(this.eatenStreak);
 
     g.state = "RESPAWN";
     g.body.setFillStyle(0xffffff, 1);
@@ -660,21 +631,14 @@ export class GameScene extends Phaser.Scene {
   private onPacmanHit() {
     if (this.state !== "PLAYING") return;
     this.state = "PLAYER_DYING";
+    this.sfx.hit();
 
     this.lives -= 1;
-    if (this.livesText) this.livesText.setText(`Lives: ${this.lives}`);
+    this.emitUi();
 
     if (this.lives <= 0) {
       this.state = "GAME_OVER";
-      this.gameOverText = this.add
-        .text(this.scale.width / 2, this.scale.height / 2, "GAME OVER\n(Enter zum Neustart)", {
-          fontFamily: "monospace",
-          fontSize: "28px",
-          align: "center",
-          color: "#ffffff",
-          backgroundColor: "#000000"
-        })
-        .setOrigin(0.5, 0.5);
+      this.emitUi();
       return;
     }
 
@@ -682,6 +646,7 @@ export class GameScene extends Phaser.Scene {
     this.time.delayedCall(650, () => {
       this.respawnEntities();
       this.state = "PLAYING";
+      this.emitUi();
     });
   }
 
@@ -710,13 +675,50 @@ export class GameScene extends Phaser.Scene {
     const now = this.time.now;
     this.frightenedUntilMs = Math.max(this.frightenedUntilMs, now) + 7000;
     this.eatenStreak = 0;
+    this.emitUi();
 
     for (const g of this.ghosts) {
       if (g.state === "RESPAWN") continue;
       g.state = "FRIGHTENED";
       g.body.setFillStyle(0x2b6cff, 1);
       g.body.setAlpha(1);
+
+      // Kleines Feedback: kurzer Blink.
+      this.tweens.add({
+        targets: g.body,
+        alpha: { from: 1, to: 0.5 },
+        duration: 120,
+        yoyo: true,
+        repeat: 2
+      });
     }
+  }
+
+  private togglePause() {
+    if (this.state === "PLAYING") {
+      this.state = "PAUSED";
+      this.emitUi();
+      return;
+    }
+    if (this.state === "PAUSED") {
+      this.state = "PLAYING";
+      this.emitUi();
+    }
+  }
+
+  private emitUi() {
+    const frightenedActive = this.time.now < this.frightenedUntilMs;
+    const base = {
+      score: this.score,
+      lives: this.lives,
+      mode: this.ghostMode,
+      frightened: frightenedActive
+    };
+
+    if (this.state === "PAUSED") this.events.emit("ui", { type: "PAUSED", ...base });
+    else if (this.state === "LEVEL_COMPLETE") this.events.emit("ui", { type: "LEVEL_COMPLETE", ...base });
+    else if (this.state === "GAME_OVER") this.events.emit("ui", { type: "GAME_OVER", ...base });
+    else this.events.emit("ui", { type: "PLAYING", ...base });
   }
 }
 

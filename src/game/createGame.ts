@@ -1,5 +1,7 @@
 import Phaser from "phaser";
 import { GameScene } from "../scenes/GameScene";
+import { MenuScene } from "../scenes/MenuScene";
+import { UIScene } from "../scenes/UIScene";
 
 export function createGame(): Phaser.Game {
   const game = new Phaser.Game({
@@ -14,7 +16,7 @@ export function createGame(): Phaser.Game {
       width: 448,
       height: 496
     },
-    scene: [GameScene]
+    scene: [MenuScene, GameScene, UIScene]
   });
 
   // Canvas fokussierbar machen, damit Cursor-Keys zuverlässig ankommen
